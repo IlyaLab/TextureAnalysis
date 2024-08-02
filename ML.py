@@ -64,7 +64,11 @@ def plot_predict(X_train, X_test, y_train, y_test, MSI_validation_folder='', MSS
     kf = StratifiedKFold(n_splits=10, shuffle=True)
     rf_clf = RandomForestClassifier(n_jobs=-1, random_state=22)
     param_grid = {
-    'n_estimators' : [1000],
+    'n_estimators' : [int(n) for n in np.linspace(start=1000, stop=10000, num=1000)],
+    'max_features' :  ['auto', 'sqrt'],
+    'max_depth' : [int(n) for n in np.linspace(start=10, stop=110, num=11)],
+    'min_samples_split' : [2, 5, 9],
+    'min_samples_leaf': [1, 2, 4],
     'bootstrap' : [True, False],
     }
     clf = GridSearchCV(estimator=rf_clf, param_grid=param_grid, cv=kf).fit(X_train, y_train)
