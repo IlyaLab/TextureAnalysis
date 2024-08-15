@@ -10,6 +10,8 @@ def subset_dirs(src, label):
 
 # creates subsets for both CPU multiprocessing and validation sets
 def create_subsets(src, label, sample_size=5000, n_jobs=1):
+    if n_jobs == -1:
+        n_jobs = os.cpu_count()
     dest = subset_dirs(src, label)
     # checks to see which tiles are already in the destination folder
     dest_list = []

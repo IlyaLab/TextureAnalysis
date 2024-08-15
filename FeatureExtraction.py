@@ -27,6 +27,13 @@ angle_names = ['0', '45', '90', '135']
 distances = [1]
 angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
 
+# this is defined here to be used in ML.py for feature_importance
+feature_headers = []
+for channel in channel_names:
+    for angle in angle_names:
+        for feature in feature_names:
+            feature_headers.append((feature + '-' + channel + '-' + angle))
+
 
 def feature_extraction(src, save_path):
     processes = []
@@ -158,7 +165,7 @@ def texture_features(Folders_Path, save_path):
     
     feature_matrix['Tile'] = index
     feature_matrix.set_index('Tile', inplace=True)
-    feature_matrix.to_csv(save_path,)
+    feature_matrix.to_csv(save_path)
 
 
 def calc_features(Img_arr, distances=[1], angles=[0, np.pi/4, np.pi/2, 3*np.pi/4]):
