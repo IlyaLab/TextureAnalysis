@@ -74,9 +74,9 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
     kf = StratifiedKFold(n_splits=10, shuffle=True)
     rf_clf = RandomForestClassifier(n_jobs=-1, random_state=22)
     param_grid = {
-    'n_estimators' : [int(n) for n in np.linspace(start=1000, stop=5000, num=1000)],
+    'n_estimators' : [int(n) for n in np.linspace(start=1000, stop=5000, num=10)],
     #'max_features' :  ['auto', 'sqrt'],
-    'max_depth' : [int(n) for n in np.linspace(start=10, stop=110, num=11)],
+    #'max_depth' : [int(n) for n in np.linspace(start=10, stop=110, num=11)],
     #'min_samples_split' : [2, 5, 7],
     #'min_samples_leaf': [1, 2, 4],
     #'bootstrap' : [True, False],
