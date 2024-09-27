@@ -111,7 +111,7 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
                       'Specificty: ' + str('%.3f' % specificity_score(y_test, y_pred))], handlelength=0)
     plt.show()
 
-    feature_importance(clf, X_train, X_test, y_train, y_test, data, title=title)
+    #feature_importance(clf, X_train, X_test, y_train, y_test, data, title=title)
 
     return y_pred
 
