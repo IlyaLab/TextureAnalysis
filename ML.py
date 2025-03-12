@@ -5,18 +5,25 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score, roc_curve, balanced_accuracy_score
-from sklearn.inspection import permutation_importance
 from imblearn.metrics import specificity_score
+import xgboost as xgb # version 2.1.4
+import torch
+import os
+import joblib
+
+# fcts for feature_importance(), which currently go unused since switching to XGBoost
+from FeatureExtraction import feature_headers
+
+from sklearn.inspection import permutation_importance
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
 from scipy.stats import spearmanr
 from collections import defaultdict
-import os
-
-from FeatureExtraction import feature_headers
 
 
 plt.rcParams.update({'font.size': 22})
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def combine_subsets(input_dir):
     # multiprocessing splits up the texture analysis results into separate csv files, so this combines them into a single one
@@ -33,18 +40,19 @@ def combine_subsets(input_dir):
 
 def preprocess_data(MSI_folder, MSS_folder):
     # assigns MSI and MSS labels based off of which folder they came from (ala Kather dataset)
-    MSI_df = combine_subsets(MSI_folder)
-    MSS_df = combine_subsets(MSS_folder)
-    y_MSI = np.ones(len(MSI_df))
-    y_MSS = np.zeros(len(MSS_df))
+    MSI_df, MSS_df = combine_subsets(MSI_folder), combine_subsets(MSS_folder)
+    y_MSI, y_MSS = np.ones(len(MSI_df)), np.zeros(len(MSS_df))
     X = pd.concat( (MSI_df, MSS_df), axis=0)
     y = np.concatenate((y_MSI, y_MSS))
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2, random_state=22, shuffle=True)
     testing_indicies = X_test.index
     scalar = StandardScaler().fit(X_train)
-    X_train = scalar.transform(X_train)
-    X_test = scalar.transform(X_test)
+    X_train, X_test = scalar.transform(X_train), scalar.transform(X_test)
+
+    if device.type == 'cuda':
+        X_train, X_test = torch.from_numpy(X_train), torch.from_numpy(X_test)
+        X = torch.tensor(X.values)
 
     return X_train, X_test, y_train, y_test, X, list(testing_indicies)
 
@@ -69,21 +77,91 @@ def bootstrapping(y_test, y_pred_proba, n_bootstraps = 10000, rng_seed=22):
     return confidence_upper, confidence_lower
 
 
-def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='', MSS_validation_folder='', title='', validation=False):
+def choose_ML(model, ML):
+    if ML == 'XGBoost_models':
+        if model == 'CRC':
+            model = 'TCGA-CRC_model.ubj'
+        elif model == 'STAD':
+            model = 'TCGA-STAD_model.ubj'
+        elif model == 'UCEC':
+            model = 'TCGA-UCEC_model.ubj'
+        else:
+            model = 'model.ubj'
+    elif ML == 'RandomForest_models':
+        if model == 'CRC':
+            model = 'TCGA-CRC_model.pkl'
+        elif model == 'STAD':
+            model = 'TCGA-STAD_model.pkl'
+        elif model == 'UCEC':
+            model = 'TCGA-UCEC_model.pkl'
+        else:
+            model = 'model.pkl'
+
+    return model
+
+
+def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='', MSS_validation_folder='', title='', validation=False, model='', ML='XGBoost'):
     # performing gridsearch and prediction
-    kf = StratifiedKFold(n_splits=10, shuffle=True)
-    rf_clf = RandomForestClassifier(n_jobs=-1, random_state=22)
-    param_grid = {
-    'n_estimators' : [int(n) for n in np.linspace(start=1000, stop=5000, num=10)],
-    #'max_features' :  ['auto', 'sqrt'],
-    #'max_depth' : [int(n) for n in np.linspace(start=10, stop=110, num=11)],
-    #'min_samples_split' : [2, 5, 7],
-    #'min_samples_leaf': [1, 2, 4],
-    #'bootstrap' : [True, False],
-    }
-    clf = GridSearchCV(estimator=rf_clf, param_grid=param_grid, cv=kf).fit(X_train, y_train)
+
+    if ML == 'XGBoost':
+        ML_folder = ML + '_models'
+    elif ML == 'RandomForest':
+        ML_folder = ML + "_models"
+
+    model = choose_ML(model, ML_folder)
+
+    if model not in os.listdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder)): 
+        kf = StratifiedKFold(n_splits=10, shuffle=True)
+        # here we are going to be testing prediction with a few different models:
+        if ML == 'XGBoost':
+
+            '''XGBoost'''
+            base_clf = xgb.XGBClassifier(device='cuda', booster='dart', n_jobs=-1, random_state=22)
+            param_grid ={
+                'n_estimators' : [100],
+                'max_depth' : [3,5],
+                'eta' : [0.1, 0.3],
+                # 'subsample' : [0.3, 0.5, 0.8, 1],
+                # 'gamma' : [0, 0.5, 1, 10],
+                # 'grow_policy' : ['depthwise', 'lossguide'],
+                'sampling_method' : ['uniform', 'gradient_based'],
+                'objective' : ['binary:logistic']
+            }
+        elif ML == 'RandomForest':
+
+            '''RandomForest'''
+            base_clf = RandomForestClassifier(n_jobs=-1, random_state=22)
+            param_grid = {
+                'n_estimators' : [1000],#[int(n) for n in np.linspace(start=1000, stop=5000, num=10)],
+                # 'max_features' :  ['sqrt', None],
+                # 'max_depth' : [3],
+                # 'min_samples_split' : [2, 5, 7],
+                # 'min_samples_leaf': [1],
+                # 'bootstrap' : [True, False],
+                # 'class_weight' : [None, 'balanced', 'balanced_subsample']
+            }
+        
+        
+        clf = GridSearchCV(estimator=base_clf, param_grid=param_grid, cv=kf).fit(X_train, y_train)
+        pretrained = False
+        print('Training complete.')
+    elif model in os.listdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder)):
+        print(f'Loading trained model {model}.')
+        if ML == 'XGBoost':
+            clf = xgb.XGBClassifier(device=device)
+            clf.load_model(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, model))
+        elif ML == 'RandomForest':
+            clf = joblib.load(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, model))
+        pretrained = True
+
     y_pred = clf.predict(X_test)
-    y_pred_proba = clf.predict_proba(X_test)
+    try:
+        y_pred_proba = clf.predict_proba(X_test)
+    except:
+        # allows for models such as SVM without any issue
+        y_pred_proba = y_pred
+        temp = np.zeros_like(y_pred_proba)
+        y_pred_proba = np.column_stack((temp, y_pred_proba))
 
     # bootstrapping to get AUROC confidence internval
     confidence_upper, confidence_lower = bootstrapping(y_test, y_pred_proba, n_bootstraps=10000, rng_seed=22)
@@ -100,6 +178,14 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
         auroc, ci_l, ci_u, ax = validation_sets(MSI_validation_folder, MSS_validation_folder, clf, ax)
     else:
         auroc, ci_l, ci_u = [], [], []
+
+    # locally save trained model
+    if pretrained == False:
+        if ML == 'XGBoost':
+            clf.best_estimator_.save_model(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, 'model.ubj'))
+        elif ML == 'RandomForest':
+            _ = joblib.dump(clf, os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, 'model.pkl'))
+
 
     # confidence intervals and AUROC from initial prediction
     ci_l.append(confidence_lower)
@@ -122,21 +208,29 @@ def validation_sets(MSI_folder, MSS_folder, model, ax):
     ci_lower = []
     ci_upper = []
     for MSI_set, MSS_set in zip(os.listdir(MSI_folder), os.listdir(MSS_folder)):
-        MSI_df = pd.read_csv(os.path.join(MSI_folder, MSI_set))
-        MSS_df = pd.read_csv(os.path.join(MSS_folder, MSS_set))
+        MSI_df, MSS_df = pd.read_csv(os.path.join(MSI_folder, MSI_set)), pd.read_csv(os.path.join(MSS_folder, MSS_set))
 
         MSI_df.set_index('Tile', inplace=True)
         MSS_df.set_index('Tile', inplace=True)
 
-        y_MSI = np.ones(len(MSI_df))
-        y_MSS = np.zeros(len(MSS_df))
+        y_MSI, y_MSS = np.ones(len(MSI_df)), np.zeros(len(MSS_df))
         X = pd.concat( (MSI_df, MSS_df), axis=0)
         y = np.concatenate((y_MSI, y_MSS))
 
         scalar = StandardScaler().fit(X)
         X = scalar.transform(X)
 
-        y_pred_proba = model.predict_proba(X)
+        if device.type == 'cuda':
+            X = torch.from_numpy(X)
+
+        try:
+            y_pred_proba = model.predict_proba(X)
+        except:
+            # allows for usage of models like SVM
+            y_pred_proba = model.predict(X)
+            temp = np.zeros_like(y_pred_proba)
+            y_pred_proba = np.column_stack((temp, y_pred_proba))
+        
         fpr, tpr, _ = roc_curve(y, y_pred_proba[:,1])
         score = roc_auc_score(y, y_pred_proba[:,1])
         auroc.append(score)
@@ -149,6 +243,8 @@ def validation_sets(MSI_folder, MSS_folder, model, ax):
         
     return auroc, ci_lower, ci_upper, ax
 
+
+''' The feature_importance() functions are depreciated since switching to XGBoost as the ML model, instead of RandomForest.
 
 def feature_importance(model, X_train, X_test, y_train, y_test, data, title=''):
     plt.rcParams.update(plt.rcParamsDefault)
@@ -199,16 +295,21 @@ def plot_permutation_importance(clf, X_test, y_test, ax, data):
     )
     ax.axvline(x=0, color="k", linestyle="--")
     return ax
+'''
 
-
-def per_patient(X_test, y_pred, y_test, test_ind, title='', validation=False):
+def per_patient(y_pred, y_test, test_ind, title='', study='TCGA'):
     # Uses Kather's labels, which don't differentiate between MSI-H and MSI-L, unlike the GDC labels
-    substring = 'TCGA'
+    substring = study
     patients = {}
     for i in range(len(y_pred)):
         sample_name_indices = test_ind[i].find(substring)
-        sample_name =  test_ind[i][sample_name_indices:sample_name_indices+12]
+        if study == 'TCGA':
+            sample_name =  test_ind[i][sample_name_indices:sample_name_indices+12]
+        elif study == 'CPTAC':
+            sample_name =  test_ind[i][sample_name_indices:sample_name_indices+7]
+
         df = pd.DataFrame(np.column_stack((test_ind[i], y_pred[i], y_test[i])), columns=['ID', 'pred', 'test'])
+
         if sample_name not in patients.keys():
             patients[sample_name] = df
         else:
