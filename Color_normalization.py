@@ -108,7 +108,7 @@ def normalizeStaining(img,name, saveFile=None, Io=240, alpha=1, beta=0.15):
         #Image.fromarray(H).save('please input folder'+name+'_H.png') #please input folder
         #Image.fromarray(E).save('please input folder'+name+'_E.png') #please input folder
 
-    return Inorm, False#, H, E
+    return Inorm, #False#, H, E
 
 
 def data_process(x):
