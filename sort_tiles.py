@@ -9,10 +9,8 @@ def move_tiles(input_dir, study='TCGA'):
         sample_name_indices = file.find(substring)
         if study == 'TCGA':
             sample_name =  file[sample_name_indices:sample_name_indices+12]
-        elif study == 'CPTAC':
-            sample_name = file[0:7]
         else:
-            sample_name=file
+            sample_name=file[0:7]
 
         if os.path.exists(os.path.join(input_dir, sample_name)) == False:
             os.mkdir(os.path.join(input_dir, sample_name))
