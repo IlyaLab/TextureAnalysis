@@ -297,6 +297,7 @@ def plot_permutation_importance(clf, X_test, y_test, ax, data):
     return ax
 '''
 
+# NOTE: per_patient() currently only supports TCGA data, due to sample & tile labelling
 def per_patient(y_pred, y_test, test_ind, title='', study='TCGA'):
     # Uses Kather's labels, which don't differentiate between MSI-H and MSI-L, unlike the GDC labels
     substring = study
@@ -305,8 +306,6 @@ def per_patient(y_pred, y_test, test_ind, title='', study='TCGA'):
         sample_name_indices = test_ind[i].find(substring)
         if study == 'TCGA':
             sample_name =  test_ind[i][sample_name_indices:sample_name_indices+12]
-        elif study == 'CPTAC':
-            sample_name =  test_ind[i][sample_name_indices:sample_name_indices+7]
 
         df = pd.DataFrame(np.column_stack((test_ind[i], y_pred[i], y_test[i])), columns=['ID', 'pred', 'test'])
 
