@@ -3,11 +3,11 @@
 
 Nilus Swanson$`^1`$ , Mauro A. A. Castro$`^2`$ , A. Gordon Robertson$`^3`$ , Ilya Shmulevich$`^1`$ ,+, Bahar Tercan$`^1`$ ,*   
 
-1 Institute for Systems Biology, Seattle, WA, US
-2 Bioinformatics and Systems Biology Laboratory, Federal University of Paraná, Curitiba, PR       81520-260, Brazil
-3 Dxige Research Inc., Courtenay, British Columbia, Canada, V9N 1C2
-+Deceased, in memoriam
-*Correspondence: btercan@systemsbiology.org
+1 Institute for Systems Biology, Seattle, WA, US  
+2 Bioinformatics and Systems Biology Laboratory, Federal University of Paraná, Curitiba, PR 81520-260, Brazil  
+3 Dxige Research Inc., Courtenay, British Columbia, Canada, V9N 1C2  
++Deceased, in memoriam  
+*Correspondence: btercan@systemsbiology.org  
 
 
 ## Pipeline Overview
