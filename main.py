@@ -104,14 +104,14 @@ def main(MSI_dir, MSS_dir, sample_size=5000, n_jobs=1, cohort_name='', validatio
         y_pred = plot_predict(X_train,X_test, y_train, y_test, data, 
                               os.path.join(save_path, 'MSI_validation_subsets'), 
                               os.path.join(save_path, 'MSS_validation_subsets'), 
-                              title=('Prediction of MSI in ' + cohort_name), 
+                              title=('ROC Curves of Texture Features with ' + study + '-' +  model + ' Model for '+ cohort_name), 
                               validation=validation, model=model, ML=ML)
     else:
         y_pred = plot_predict(X_train,X_test, y_train, y_test, data, 
-                              title=('Prediction of MSI in ' + cohort_name), 
+                              title=('ROC Curves of Texture Features with ' + study + '-' +  model + ' Model for '+ cohort_name), 
                               validation=validation, model=model, ML=ML)
     
     per_patient(y_pred, y_test, test_ind, 
-                title=('Per Patient Prediction of MSI in ' + cohort_name), study=study)
+                title=('Per Patient ROC Curves of Texture Features with ' + study + '-' +  model + ' Model for '+ cohort_name), study=study)
 
     print('Machine learning complete.')
