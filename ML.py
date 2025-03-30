@@ -11,17 +11,16 @@ import torch
 import os
 import joblib
 
-# fcts for feature_importance(), which currently go unused since switching to XGBoost
 from FeatureExtraction import feature_headers
-
 from sklearn.inspection import permutation_importance
+
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
 from scipy.stats import spearmanr
 from collections import defaultdict
 
 
-plt.rcParams.update({'font.size': 22})
+plt.rcParams.update({'font.size': 18})
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -83,8 +82,8 @@ def choose_ML(model, ML):
             model = 'TCGA-CRC_model.ubj'
         elif model == 'STAD':
             model = 'TCGA-STAD_model.ubj'
-        elif model == 'UCEC':
-            model = 'TCGA-UCEC_model.ubj'
+        # elif model == 'UCEC':
+        #     model = 'TCGA-UCEC_model.ubj'
         else:
             model = 'model.ubj'
     elif ML == 'RandomForest_models':
@@ -170,7 +169,7 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
     fpr, tpr, _ = roc_curve(y_test, y_pred_proba[:,1])
     og_auroc = roc_auc_score(y_test, y_pred_proba[:,1])
     _, ax = plt.subplots(figsize=(10,8))
-    ax.set(title=title, xlabel='FPR', ylabel='TPR',)
+    ax.set(title=title, xlabel='False Positive Rate', ylabel='True Positive Rate')
     ax.plot(fpr, tpr)
     ax.plot([0,1], [0,1], 'k--')
 
@@ -184,7 +183,7 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
         if ML == 'XGBoost':
             clf.best_estimator_.save_model(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, 'model.ubj'))
         elif ML == 'RandomForest':
-            _ = joblib.dump(clf, os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, 'model.pkl'))
+            _ = joblib.dump(clf.best_estimator_, os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, 'model.pkl'))
 
 
     # confidence intervals and AUROC from initial prediction
@@ -192,12 +191,16 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
     ci_u.append(confidence_upper)
     auroc.append(og_auroc)
 
-    ax.legend(labels=['AUROC:' + str('%.3f' % np.mean(auroc)), 'Confidence Interval: [{:0.3f} - {:0.3f}]'.format(np.min(ci_l), np.max(ci_u)),
+    ax.legend(labels=['AUC:' + str('%.3f' % np.mean(auroc)), 'Confidence Interval: [{:0.3f} - {:0.3f}]'.format(np.min(ci_l), np.max(ci_u)),
                       'Balanced Accuracy:' + str('%.3f' % balanced_accuracy_score(y_test, y_pred)),
                       'Specificty: ' + str('%.3f' % specificity_score(y_test, y_pred))], handlelength=0)
     plt.show()
-
-    #feature_importance(clf, X_train, X_test, y_train, y_test, data, title=title)
+    try:
+        clf.best_estimator_
+        feature_importance(clf.best_estimator_, data)
+    except:
+        feature_importance(clf,data)
+    
 
     return y_pred
 
@@ -244,43 +247,31 @@ def validation_sets(MSI_folder, MSS_folder, model, ax):
     return auroc, ci_lower, ci_upper, ax
 
 
-''' The feature_importance() functions are depreciated since switching to XGBoost as the ML model, instead of RandomForest.
+ #The feature_importance() functions are depreciated since switching to XGBoost as the ML model, instead of RandomForest.
 
-def feature_importance(model, X_train, X_test, y_train, y_test, data, title=''):
-    plt.rcParams.update(plt.rcParamsDefault)
+def feature_importance(model, data):
+    # plt.rcParams.update(plt.rcParamsDefault)
+
+    try:
+        model.get_booster().feature_names = feature_headers 
+        feature_important = model.get_booster().get_score(importance_type='weight')
+        keys = list(feature_important.keys())
+        values = list(feature_important.values())
+
+        data = pd.DataFrame(data=values, index=keys, columns=["score"]).sort_values(by = "score", ascending=True)
+        ax = data.loc[:,"score"].tail(10).plot(kind='barh', figsize = (20,10)) # plot top features
+
+        ax.set_title("Feature Importance\n")
+        ax.set_xlabel("Model Weight")
+        ax.set_ylabel("Features")
+    except:
+        mdi_importances = pd.Series(
+            model.feature_importances_, index=feature_headers
+            ).sort_values(ascending=True)
+        ax = mdi_importances.tail(5).plot(kind='barh', figsize = (20,10))
+        ax.set_title("Random Forest Feature Importances (MDI)")
+        ax.set_ylabel('Features')
     
-    # Measure correlation amongst features
-    corr = spearmanr(data).correlation
-
-    # Ensure the correlation matrix is symmetric
-    corr = (corr + corr.T) / 2
-    np.fill_diagonal(corr, 1)
-
-    # Convert the correlation matrix to a distance matrix before performing hierarchical clustering
-    distance_matrix = 1 - np.abs(corr)
-    dist_linkage = hierarchy.ward(squareform(distance_matrix))
-
-    cluster_ids = hierarchy.fcluster(dist_linkage, 1, criterion="distance")
-    cluster_id_to_feature_ids = defaultdict(list)
-    for idx, cluster_id in enumerate(cluster_ids):
-        cluster_id_to_feature_ids[cluster_id].append(idx)
-    selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
-
-    X_train_sel = (X_train.T[selected_features]).T
-    X_test_sel = (X_test.T[selected_features]).T
-
-    clf_sel = RandomForestClassifier(n_estimators=1000, random_state=22)
-    clf_sel.fit(X_train_sel, y_train)
-    print(
-        "Baseline accuracy on test data with features removed:"
-        f" {clf_sel.score(X_test_sel, y_test):.2}"
-    )
-
-    _, ax = plt.subplots(figsize=(10, 8))
-    plot_permutation_importance(clf_sel, X_test_sel, y_test, ax, data)
-    ax.set_title("Permutation Importances on subset of features\n" + (title))
-    ax.set_xlabel("Decrease in accuracy score")
-    ax.figure.tight_layout()
     plt.show()
 
 
@@ -295,7 +286,7 @@ def plot_permutation_importance(clf, X_test, y_test, ax, data):
     )
     ax.axvline(x=0, color="k", linestyle="--")
     return ax
-'''
+
 
 # NOTE: per_patient() currently only supports TCGA data, due to sample & tile labelling
 def per_patient(y_pred, y_test, test_ind, title='', study='TCGA'):
@@ -328,8 +319,8 @@ def per_patient(y_pred, y_test, test_ind, title='', study='TCGA'):
     fpr, tpr, _ = roc_curve(y_test_label, y_pred_ratio)
     ax.plot(fpr, tpr)
     ax.plot([0,1], [0,1], 'k--')
-    ax.set(title=title, xlabel='FPR', ylabel='TPR')
-    ax.legend(labels=['AUROC: ' + str('%.3f' % roc_auc_score(y_test_label, y_pred_ratio)), 'Balanced Accuracy: ' + str('%.3f' % balanced_accuracy_score(y_test_label, y_pred_label))],
+    ax.set(title=title, xlabel='False Positive Rate', ylabel='True Positive Rate')
+    ax.legend(labels=['AUC: ' + str('%.3f' % roc_auc_score(y_test_label, y_pred_ratio)), 'Balanced Accuracy: ' + str('%.3f' % balanced_accuracy_score(y_test_label, y_pred_label))],
               handlelength=0)
 
 
