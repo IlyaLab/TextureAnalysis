@@ -1,7 +1,7 @@
 # TextureAnalysis
 ## Predicting microsatellite instability from whole slide images using texture features
 
-Nilus Swanson1, Mauro A. A. Castro2, A. Gordon Robertson3, Ilya Shmulevich1,+, Bahar Tercan1,*   
+Nilus Swanson$1^$, Mauro A. A. Castro$^2$, A. Gordon Robertson$^3$, Ilya Shmulevich$^1$,+, Bahar Tercan$^1$,*   
 
 1 Institute for Systems Biology, Seattle, WA, US
 2 Bioinformatics and Systems Biology Laboratory, Federal University of Paraná, Curitiba, PR       81520-260, Brazil
