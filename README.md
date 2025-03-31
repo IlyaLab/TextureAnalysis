@@ -1,7 +1,6 @@
 ## Predicting microsatellite instability from whole slide images using texture features
-*Contact: Bahar Tercan btercan@systemsbiology.org  
-
 This project utilizes texture features extracted from hematoxylin and eosin (H&E) stained whole slide images (WSIs) in order to predict microsatellite instability. 
+Contact: Bahar Tercan btercan@systemsbiology.org  
 
 ## Install and usage
 Using the already segmented and MSI labelled tiles from the Kather dataset that can be found at DOI: 10.5281/zenodo.2530834 or at https://zenodo.org/records/2530835, the following example can be implemented.  
