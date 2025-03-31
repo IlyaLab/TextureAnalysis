@@ -1,9 +1,5 @@
-# TextureAnalysis
 ## Predicting microsatellite instability from whole slide images using texture features
 *Contact: Bahar Tercan btercan@systemsbiology.org  
-
-## Pipeline Overview
-![Image of the texture analysis pipeline for predciting MSI.](/images/MSI-vs-MSS-fig.png)
 
 This project utilizes texture features extracted from hematoxylin and eosin (H&E) stained whole slide images (WSIs) in order to predict microsatellite instability. 
 
