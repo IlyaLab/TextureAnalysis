@@ -44,6 +44,7 @@ main(MSI_dir, MSS_dir, sample_size=5000, n_jobs=-1, cohort_name='TCGA-CRC', vali
 
 
 ## License
+Apache-2.0 license
 
 ## Author Contributions
 I.S. conceptualized the study, NS implemented the analyses and visualizations and wrote the initial manuscript draft. B.T., I.S., M.C., G.R. provided guidance, I.S. and B.T. administered the project, B.T., N.S., M.C., G.R.  did manuscript reviewing and editing.
