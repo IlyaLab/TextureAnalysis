@@ -3,8 +3,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, roc_curve, balanced_accuracy_score
+from sklearn.metrics import roc_auc_score, roc_curve, balanced_accuracy_score, precision_score, confusion_matrix
 from imblearn.metrics import specificity_score
 import xgboost as xgb # version 2.1.4
 import torch
@@ -82,11 +84,11 @@ def choose_ML(model, ML):
             model = 'TCGA-CRC_model.ubj'
         elif model == 'STAD':
             model = 'TCGA-STAD_model.ubj'
-        # elif model == 'UCEC':
-        #     model = 'TCGA-UCEC_model.ubj'
+        elif model == 'UCEC':
+            model = 'TCGA-UCEC_model.ubj'
         else:
             model = 'model.ubj'
-    elif ML == 'RandomForest_models':
+    else:
         if model == 'CRC':
             model = 'TCGA-CRC_model.pkl'
         elif model == 'STAD':
@@ -102,10 +104,7 @@ def choose_ML(model, ML):
 def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='', MSS_validation_folder='', title='', validation=False, model='', ML='XGBoost'):
     # performing gridsearch and prediction
 
-    if ML == 'XGBoost':
-        ML_folder = ML + '_models'
-    elif ML == 'RandomForest':
-        ML_folder = ML + "_models"
+    ML_folder = ML + '_models'
 
     model = choose_ML(model, ML_folder)
 
@@ -120,9 +119,6 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
                 'n_estimators' : [100],
                 'max_depth' : [3,5],
                 'eta' : [0.1, 0.3],
-                # 'subsample' : [0.3, 0.5, 0.8, 1],
-                # 'gamma' : [0, 0.5, 1, 10],
-                # 'grow_policy' : ['depthwise', 'lossguide'],
                 'sampling_method' : ['uniform', 'gradient_based'],
                 'objective' : ['binary:logistic']
             }
@@ -132,15 +128,30 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
             base_clf = RandomForestClassifier(n_jobs=-1, random_state=22)
             param_grid = {
                 'n_estimators' : [1000],#[int(n) for n in np.linspace(start=1000, stop=5000, num=10)],
-                # 'max_features' :  ['sqrt', None],
-                # 'max_depth' : [3],
-                # 'min_samples_split' : [2, 5, 7],
-                # 'min_samples_leaf': [1],
-                # 'bootstrap' : [True, False],
-                # 'class_weight' : [None, 'balanced', 'balanced_subsample']
+                'max_depth' : [None],
+                'max_samples' : [0.5, 0.7, 1.0]
             }
-        
-        
+        elif ML == 'SVM':
+
+            '''SVM (SVC)'''
+            base_clf = SVC(random_state=22)
+            param_grid = {
+                'C' : [0.5, 1.0],
+                'kernel' : ['rbf', 'poly'],
+                'degree' : [3, 4, 5],
+                'class_weight' : ['balanced'],
+                'shrinking' : [True, False]
+            }
+        elif ML == 'Regression':
+
+            '''Logistic Regression'''
+            base_clf = LogisticRegression(random_state=22)
+            param_grid = {
+                'penalty' : ['l1', 'l2'],
+                'C' : [0.3, 0.5, 1.0],
+                'solver' : ['liblinear']
+            }
+
         clf = GridSearchCV(estimator=base_clf, param_grid=param_grid, cv=kf).fit(X_train, y_train)
         pretrained = False
         print('Training complete.')
@@ -149,9 +160,17 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
         if ML == 'XGBoost':
             clf = xgb.XGBClassifier(device=device)
             clf.load_model(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, model))
-        elif ML == 'RandomForest':
+        else:
             clf = joblib.load(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, model))
+
         pretrained = True
+
+    # save best training parameters on a hold out set
+    best_params_df = pd.DataFrame([clf.best_params_])
+    best_params_df.to_csv(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, (title + '_best_params.csv')))
+
+    results_df = pd.DataFrame(clf.cv_results_)
+    results_df.to_csv(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, (title + '_cv_results.csv')))
 
     y_pred = clf.predict(X_test)
     try:
@@ -169,7 +188,7 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
     fpr, tpr, _ = roc_curve(y_test, y_pred_proba[:,1])
     og_auroc = roc_auc_score(y_test, y_pred_proba[:,1])
     _, ax = plt.subplots(figsize=(10,8))
-    ax.set(title=title, xlabel='False Positive Rate', ylabel='True Positive Rate')
+    # ax.set(title=title, xlabel='False Positive Rate', ylabel='True Positive Rate')
     ax.plot(fpr, tpr)
     ax.plot([0,1], [0,1], 'k--')
 
@@ -181,9 +200,9 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
     # locally save trained model
     if pretrained == False:
         if ML == 'XGBoost':
-            clf.best_estimator_.save_model(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, 'model.ubj'))
-        elif ML == 'RandomForest':
-            _ = joblib.dump(clf.best_estimator_, os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, 'model.pkl'))
+            clf.best_estimator_.save_model(os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, (title + '_model.ubj')))
+        else:
+            _ = joblib.dump(clf.best_estimator_, os.path.join(os.path.dirname(os.path.realpath(__file__)), ML_folder, (title + '_model.pkl')))
 
 
     # confidence intervals and AUROC from initial prediction
@@ -191,15 +210,27 @@ def plot_predict(X_train, X_test, y_train, y_test, data, MSI_validation_folder='
     ci_u.append(confidence_upper)
     auroc.append(og_auroc)
 
-    ax.legend(labels=['AUC:' + str('%.3f' % np.mean(auroc)), 'Confidence Interval: [{:0.3f} - {:0.3f}]'.format(np.min(ci_l), np.max(ci_u)),
-                      'Balanced Accuracy:' + str('%.3f' % balanced_accuracy_score(y_test, y_pred)),
-                      'Specificty: ' + str('%.3f' % specificity_score(y_test, y_pred))], handlelength=0)
+    # calc confusion matrix metrics
+    cm = confusion_matrix(y_test, y_pred)
+    FP = cm.sum(axis=0) - np.diag(cm)
+    FN = cm.sum(axis=1) - np.diag(cm)
+    TP = np.diag(cm)
+    TN = cm.sum() - (FP + FN + TP)
+
+    neg_pred_val = TN / (TN + FN)
+
+
+    # ax.legend(labels=['AUC:' + str('%.3f' % np.mean(auroc)) + ' [{:0.3f} - {:0.3f}]'.format(np.min(ci_l), np.max(ci_u)),
+    #                   'Balanced Accuracy:' + str('%.3f' % balanced_accuracy_score(y_test, y_pred)),
+    #                   'Specificty: ' + str('%.3f' % specificity_score(y_test, y_pred)),
+    #                   'Precision (PPV): ' + str('%.3f' % precision_score(y_test, y_pred)),
+    #                   'NPV: '+ '{:0.3f}'.format(neg_pred_val[1])], handlelength=0)
     plt.show()
-    try:
-        clf.best_estimator_
-        feature_importance(clf.best_estimator_, data)
-    except:
-        feature_importance(clf,data)
+    # try:
+    #     clf.best_estimator_
+    #     feature_importance(clf.best_estimator_, data)
+    # except:
+    #     feature_importance(clf,data)
     
 
     return y_pred
@@ -319,8 +350,8 @@ def per_patient(y_pred, y_test, test_ind, title='', study='TCGA'):
     fpr, tpr, _ = roc_curve(y_test_label, y_pred_ratio)
     ax.plot(fpr, tpr)
     ax.plot([0,1], [0,1], 'k--')
-    ax.set(title=title, xlabel='False Positive Rate', ylabel='True Positive Rate')
-    ax.legend(labels=['AUC: ' + str('%.3f' % roc_auc_score(y_test_label, y_pred_ratio)), 'Balanced Accuracy: ' + str('%.3f' % balanced_accuracy_score(y_test_label, y_pred_label))],
-              handlelength=0)
+    # ax.set(title=title, xlabel='False Positive Rate', ylabel='True Positive Rate')
+    # ax.legend(labels=['AUC: ' + str('%.3f' % roc_auc_score(y_test_label, y_pred_ratio)), 'Balanced Accuracy: ' + str('%.3f' % balanced_accuracy_score(y_test_label, y_pred_label))],
+    #           handlelength=0)
 
 
